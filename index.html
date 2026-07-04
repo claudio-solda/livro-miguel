@@ -61,7 +61,20 @@
   .cover{
     background: linear-gradient(160deg, var(--c1), var(--c2));
     color:#fff; text-align:center; justify-content:center; gap:16px;
+    position:relative; overflow:hidden;
   }
+  .cover .deco{
+    position:absolute; pointer-events:none; user-select:none;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,.25));
+    opacity:.85;
+  }
+  .cover .deco.d1{ top:6%; left:8%; font-size:34px; transform:rotate(-15deg);}
+  .cover .deco.d2{ top:14%; right:10%; font-size:26px; transform:rotate(20deg);}
+  .cover .deco.d3{ bottom:10%; left:12%; font-size:30px; transform:rotate(10deg);}
+  .cover .deco.d4{ bottom:20%; right:8%; font-size:22px; transform:rotate(-25deg);}
+  .cover .deco.d5{ top:42%; left:4%; font-size:20px; transform:rotate(8deg);}
+  .cover .deco.d6{ top:38%; right:5%; font-size:24px; transform:rotate(-10deg);}
+  .cover-content{ position:relative; z-index:2; display:flex; flex-direction:column; align-items:center; gap:16px;}
   .cover .cover-photo{
     width:62%; aspect-ratio:1/1; border-radius:50%; overflow:hidden;
     border:5px solid rgba(255,255,255,.85); box-shadow:0 10px 30px rgba(0,0,0,.35);
@@ -166,15 +179,14 @@
 
 <script>
 const CONFIG = {
-  owner: "claudio-solda",
-  repo: "livro-miguel",
-  branch: "main",
-  token: "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",
+  childId: "miguel",
   childName: "Miguel",
   childArticle: "o",
-  coverPhoto: "fotos/miguel-001.jpg",
+  seedPhotoUrl: "https://raw.githubusercontent.com/claudio-solda/livro-miguel/main/fotos/miguel-001.jpg",
   password: "Messi",
-  lockKey: "livro-miguel_unlocked"
+  lockKey: "livro-miguel_unlocked",
+  firebaseApiKey: "AIzaSyC58yXOGfhBhVRhWWHd-Cd5zwPFRutVdoA",
+  firebaseProjectId: "livros-fotos"
 };
 
 (function initLock(){
@@ -202,8 +214,7 @@ const CONFIG = {
   setTimeout(()=> lockInput.focus(), 300);
 })();
 
-const API = `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents`;
-const RAW = `https://raw.githubusercontent.com/${CONFIG.owner}/${CONFIG.repo}/${CONFIG.branch}`;
+const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${CONFIG.firebaseProjectId}/databases/(default)/documents`;
 
 let photos = [];       // array de nomes de arquivo, ex: "fotos/xxx.jpg"
 let pages = [];        // array de arrays (1 ou 2 fotos por página) + capa
@@ -231,16 +242,23 @@ function chunk(arr, size){
 }
 
 async function loadPhotos(){
+  photos = [];
+  if(CONFIG.seedPhotoUrl){
+    photos.push({type:'url', src: CONFIG.seedPhotoUrl});
+  }
   try{
-    const res = await fetch(`${RAW}/photos.json?t=${Date.now()}`, {cache:"no-store"});
+    const url = `${FIRESTORE_BASE}/livros/${CONFIG.childId}/fotos?key=${CONFIG.firebaseApiKey}&orderBy=createdAt&pageSize=300`;
+    const res = await fetch(url, {cache:"no-store"});
     if(res.ok){
       const data = await res.json();
-      photos = data.photos || [];
-    } else {
-      photos = [];
+      const docs = data.documents || [];
+      docs.forEach(doc=>{
+        const b64 = doc.fields && doc.fields.data && doc.fields.data.stringValue;
+        if(b64) photos.push({type:'base64', src: `data:image/jpeg;base64,${b64}`});
+      });
     }
   }catch(e){
-    photos = [];
+    console.error('Erro ao carregar fotos do Firestore', e);
   }
   buildPages();
   render();
@@ -253,11 +271,19 @@ function buildPages(){
 
 function pageInnerHTML(page, pageNum){
   if(page.type==='cover'){
-    const photoSrc = CONFIG.coverPhoto ? `${RAW}/${CONFIG.coverPhoto}` : '';
+    const photoSrc = CONFIG.seedPhotoUrl || '';
     return `
-      <div class="cover-photo"><img src="${photoSrc}" onerror="this.parentElement.style.display='none'"></div>
-      <h2>Livro d${CONFIG.childArticle} ${CONFIG.childName}</h2>
-      <span>toque e arraste para folhear &#8594;</span>
+      <span class="deco d1">⚽</span>
+      <span class="deco d2">⚽</span>
+      <span class="deco d3">⚽</span>
+      <span class="deco d4">⚽</span>
+      <span class="deco d5">⚽</span>
+      <span class="deco d6">⚽</span>
+      <div class="cover-content">
+        <div class="cover-photo"><img src="${photoSrc}" onerror="this.parentElement.style.display='none'"></div>
+        <h2>Livro d${CONFIG.childArticle} ${CONFIG.childName}</h2>
+        <span>toque e arraste para folhear &#8594;</span>
+      </div>
     `;
   }
   if(page.items.length===0){
@@ -266,7 +292,7 @@ function pageInnerHTML(page, pageNum){
       <p>Nenhuma foto ainda</p>
     </div>`;
   }
-  const imgs = page.items.map(f=>`<div class="photo-wrap"><img src="${RAW}/${f}" loading="lazy"></div>`).join('');
+  const imgs = page.items.map(p=>`<div class="photo-wrap"><img src="${p.src}" loading="lazy"></div>`).join('');
   return imgs + `<span class="pagenum">${pageNum}</span>`;
 }
 
@@ -377,7 +403,7 @@ function onDragEnd(e){
   }
 }
 
-// ---- Adicionar foto ----
+// ---- Adicionar foto (Firebase Firestore) ----
 addBtn.addEventListener('click', ()=> fileInput.click());
 
 fileInput.addEventListener('change', async (e)=>{
@@ -386,13 +412,9 @@ fileInput.addEventListener('change', async (e)=>{
   fileInput.value='';
   try{
     toast('Preparando foto...', true);
-    const base64 = await resizeAndEncode(file, 1400, 0.82);
+    const base64 = await compressImage(file);
     toast('Enviando foto...', true);
-    const filename = `fotos/${Date.now()}.jpg`;
-    await githubPut(filename, base64, `Adiciona foto de ${CONFIG.childName}`);
-
-    toast('Atualizando o livro...', true);
-    await updatePhotosJson(filename);
+    await addPhotoToFirestore(base64);
 
     toast('Foto adicionada! 🎉');
     setTimeout(hideToast, 2200);
@@ -406,66 +428,56 @@ fileInput.addEventListener('change', async (e)=>{
   }
 });
 
-function resizeAndEncode(file, maxW, quality){
+function loadImageFromFile(file){
   return new Promise((resolve, reject)=>{
     const img = new Image();
     const reader = new FileReader();
     reader.onload = ()=>{ img.src = reader.result; };
     reader.onerror = reject;
-    img.onload = ()=>{
-      let {width, height} = img;
-      if(width > maxW){ height = height*(maxW/width); width = maxW; }
-      const canvas = document.createElement('canvas');
-      canvas.width = width; canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, width, height);
-      const dataUrl = canvas.toDataURL('image/jpeg', quality);
-      resolve(dataUrl.split(',')[1]);
-    };
+    img.onload = ()=> resolve(img);
     img.onerror = reject;
     reader.readAsDataURL(file);
   });
 }
 
-async function githubPut(path, base64Content, message, sha=null){
-  const body = { message, content: base64Content, branch: CONFIG.branch };
-  if(sha) body.sha = sha;
-  const res = await fetch(`${API}/${path}`, {
-    method: 'PUT',
-    headers: {
-      'Authorization': `token ${CONFIG.token}`,
-      'Content-Type': 'application/json'
-    },
+async function compressImage(file){
+  const img = await loadImageFromFile(file);
+  let maxW = 1500, quality = 0.85;
+  let base64 = '';
+  for(let attempt=0; attempt<6; attempt++){
+    let {width, height} = img;
+    if(width > maxW){ height = height*(maxW/width); width = maxW; }
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, width, height);
+    const dataUrl = canvas.toDataURL('image/jpeg', quality);
+    base64 = dataUrl.split(',')[1];
+    if(base64.length < 700000) break;
+    maxW = Math.round(maxW * 0.75);
+    quality = Math.max(0.5, quality - 0.12);
+  }
+  return base64;
+}
+
+async function addPhotoToFirestore(base64){
+  const url = `${FIRESTORE_BASE}/livros/${CONFIG.childId}/fotos?key=${CONFIG.firebaseApiKey}`;
+  const body = {
+    fields: {
+      data: { stringValue: base64 },
+      createdAt: { timestampValue: new Date().toISOString() }
+    }
+  };
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   });
   if(!res.ok){
     const txt = await res.text();
-    throw new Error('GitHub PUT falhou: '+txt);
+    throw new Error('Firestore create falhou: '+txt);
   }
   return res.json();
-}
-
-async function githubGet(path){
-  const res = await fetch(`${API}/${path}?ref=${CONFIG.branch}`, {
-    headers: { 'Authorization': `token ${CONFIG.token}` }
-  });
-  if(!res.ok) throw new Error('GitHub GET falhou');
-  return res.json();
-}
-
-async function updatePhotosJson(newFilename){
-  let sha=null, list=[];
-  try{
-    const current = await githubGet('photos.json');
-    sha = current.sha;
-    const decoded = decodeURIComponent(escape(atob(current.content.replace(/\n/g,''))));
-    list = JSON.parse(decoded).photos || [];
-  }catch(e){
-    list = [];
-  }
-  list.push(newFilename);
-  const newContent = btoa(unescape(encodeURIComponent(JSON.stringify({photos:list}, null, 2))));
-  await githubPut('photos.json', newContent, 'Atualiza lista de fotos', sha);
 }
 
 // registra service worker (funciona offline pra abrir o app, fotos precisam de internet)
