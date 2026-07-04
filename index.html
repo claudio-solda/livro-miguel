@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Livro do Miguel</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1e3a8a">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  :root{
+    --c1: #1e3a8a;
+    --c2: #3b82f6;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+  html,body{
+    margin:0; padding:0; height:100%; overflow:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    background: linear-gradient(160deg, var(--c1), var(--c2));
+    user-select:none;
+  }
+  #app{
+    position:fixed; inset:0; display:flex; flex-direction:column;
+  }
+  header{
+    padding: calc(env(safe-area-inset-top, 0px) + 14px) 16px 12px;
+    text-align:center; color:#fff;
+    text-shadow:0 2px 6px rgba(0,0,0,.25);
+    flex-shrink:0;
+  }
+  header h1{ margin:0; font-size:22px; font-weight:800; letter-spacing:.3px;}
+  header p{ margin:4px 0 0; font-size:12px; opacity:.85; font-weight:500;}
+  #stage{
+    flex:1; position:relative; display:flex; align-items:center; justify-content:center;
+    perspective: 1800px; padding: 10px 18px 90px;
+  }
+  #book{
+    position:relative; width:100%; max-width:420px; aspect-ratio: 3/4;
+    transform-style: preserve-3d;
+  }
+  .page{
+    position:absolute; inset:0;
+    background:#fff; border-radius:14px;
+    box-shadow: 0 18px 40px rgba(0,0,0,.35);
+    transform-style: preserve-3d;
+    transform-origin: left center;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:14px; gap:10px;
+    backface-visibility:hidden;
+    overflow:hidden;
+  }
+  .page .photo-wrap{
+    width:100%; flex:1; min-height:0; border-radius:10px; overflow:hidden;
+    background:#f2f2f2; display:flex; align-items:center; justify-content:center;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.05);
+  }
+  .page .photo-wrap img{ width:100%; height:100%; object-fit:cover; display:block;}
+  .page .pagenum{
+    position:absolute; bottom:8px; right:14px; font-size:11px; color:#999; font-weight:600;
+  }
+  .cover{
+    background: linear-gradient(160deg, var(--c1), var(--c2));
+    color:#fff; text-align:center; justify-content:center; gap:16px;
+  }
+  .cover .cover-photo{
+    width:62%; aspect-ratio:1/1; border-radius:50%; overflow:hidden;
+    border:5px solid rgba(255,255,255,.85); box-shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  .cover .cover-photo img{width:100%; height:100%; object-fit:cover;}
+  .cover h2{ margin:0; font-size:26px; font-weight:800; text-shadow:0 2px 6px rgba(0,0,0,.3);}
+  .cover span{ font-size:13px; opacity:.9;}
+  .empty-page{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    color:#bbb; gap:10px; height:100%;
+  }
+  .empty-page svg{width:56px; height:56px; opacity:.5;}
+  .empty-page p{margin:0; font-size:14px; font-weight:600;}
+  footer{
+    position:fixed; left:0; right:0; bottom:0;
+    padding: 14px 20px calc(env(safe-area-inset-bottom,0px) + 16px);
+    display:flex; align-items:center; justify-content:space-between;
+    background: linear-gradient(to top, rgba(0,0,0,.28), transparent);
+  }
+  .navbtn{
+    width:46px; height:46px; border-radius:50%; border:none;
+    background:rgba(255,255,255,.25); color:#fff; font-size:20px;
+    display:flex; align-items:center; justify-content:center;
+    backdrop-filter: blur(6px);
+  }
+  .navbtn:disabled{opacity:.25;}
+  #pageIndicator{ color:#fff; font-size:13px; font-weight:700; text-shadow:0 1px 3px rgba(0,0,0,.3);}
+  #addBtn{
+    width:58px; height:58px; border-radius:50%; border:none;
+    background:#fff; color:var(--c1); font-size:28px; font-weight:800;
+    box-shadow:0 8px 24px rgba(0,0,0,.35);
+    display:flex; align-items:center; justify-content:center;
+    position:fixed; right:20px; bottom: calc(env(safe-area-inset-bottom,0px) + 90px);
+  }
+  #toast{
+    position:fixed; left:50%; top:20px; transform:translateX(-50%) translateY(-60px);
+    background:rgba(20,20,20,.92); color:#fff; padding:10px 18px; border-radius:30px;
+    font-size:13px; font-weight:600; transition:transform .3s ease; z-index:50;
+    display:flex; align-items:center; gap:8px; max-width:88%; text-align:center;
+  }
+  #toast.show{ transform:translateX(-50%) translateY(0);}
+  .spinner{
+    width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.4);
+    border-top-color:#fff; animation:spin .7s linear infinite; flex-shrink:0;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  #fileInput{display:none;}
+
+  #lockScreen{
+    position:fixed; inset:0; z-index:100;
+    background: linear-gradient(160deg, var(--c1), var(--c2));
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:24px; color:#fff; text-align:center; gap:18px;
+  }
+  #lockScreen.hidden{display:none;}
+  #lockScreen .lock-icon{
+    width:64px; height:64px; border-radius:50%; background:rgba(255,255,255,.18);
+    display:flex; align-items:center; justify-content:center; font-size:30px;
+  }
+  #lockScreen h2{ margin:0; font-size:22px; font-weight:800; text-shadow:0 2px 6px rgba(0,0,0,.3);}
+  #lockScreen input{
+    width:100%; max-width:260px; padding:14px 16px; border-radius:14px; border:none;
+    font-size:17px; text-align:center; outline:none; box-shadow:0 6px 18px rgba(0,0,0,.2);
+  }
+  #lockScreen button{
+    width:100%; max-width:260px; padding:14px; border-radius:14px; border:none;
+    background:#fff; color:var(--c1); font-size:16px; font-weight:800;
+  }
+  #lockError{ color:#fff; font-size:13px; font-weight:700; min-height:16px; opacity:.95;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Livro do Miguel</h1>
+    <p>toque para abrir e reviver os momentos</p>
+  </header>
+
+  <div id="stage">
+    <div id="book"></div>
+  </div>
+
+  <footer>
+    <button class="navbtn" id="prevBtn">&#10094;</button>
+    <span id="pageIndicator">1 / 1</span>
+    <button class="navbtn" id="nextBtn">&#10095;</button>
+  </footer>
+
+  <button id="addBtn" title="Adicionar foto">+</button>
+  <input type="file" id="fileInput" accept="image/*">
+</div>
+
+<div id="lockScreen">
+  <div class="lock-icon">&#128274;</div>
+  <h2>Livro do Miguel</h2>
+  <input type="password" id="lockInput" placeholder="Digite a senha" autocomplete="off" inputmode="text">
+  <button id="lockBtn">Entrar</button>
+  <div id="lockError"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const CONFIG = {
+  owner: "claudio-solda",
+  repo: "livro-miguel",
+  branch: "main",
+  token: "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",
+  childName: "Miguel",
+  childArticle: "o",
+  coverPhoto: "fotos/miguel-001.jpg",
+  password: "Messi",
+  lockKey: "livro-miguel_unlocked"
+};
+
+(function initLock(){
+  const lockScreen = document.getElementById('lockScreen');
+  const lockInput = document.getElementById('lockInput');
+  const lockBtn = document.getElementById('lockBtn');
+  const lockError = document.getElementById('lockError');
+
+  if(localStorage.getItem(CONFIG.lockKey) === 'yes'){
+    lockScreen.classList.add('hidden');
+    return;
+  }
+  function tryUnlock(){
+    if(lockInput.value === CONFIG.password){
+      localStorage.setItem(CONFIG.lockKey, 'yes');
+      lockScreen.classList.add('hidden');
+    } else {
+      lockError.textContent = 'Senha errada, tenta de novo';
+      lockInput.value='';
+      lockInput.focus();
+    }
+  }
+  lockBtn.addEventListener('click', tryUnlock);
+  lockInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') tryUnlock(); });
+  setTimeout(()=> lockInput.focus(), 300);
+})();
+
+const API = `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents`;
+const RAW = `https://raw.githubusercontent.com/${CONFIG.owner}/${CONFIG.repo}/${CONFIG.branch}`;
+
+let photos = [];       // array de nomes de arquivo, ex: "fotos/xxx.jpg"
+let pages = [];        // array de arrays (1 ou 2 fotos por página) + capa
+let currentIndex = 0;  // pagina atual (0 = capa)
+let animating = false;
+
+const bookEl = document.getElementById('book');
+const indicatorEl = document.getElementById('pageIndicator');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const addBtn = document.getElementById('addBtn');
+const fileInput = document.getElementById('fileInput');
+const toastEl = document.getElementById('toast');
+
+function toast(msg, loading=false){
+  toastEl.innerHTML = (loading ? '<div class="spinner"></div>' : '') + `<span>${msg}</span>`;
+  toastEl.classList.add('show');
+}
+function hideToast(){ toastEl.classList.remove('show'); }
+
+function chunk(arr, size){
+  const out=[];
+  for(let i=0;i<arr.length;i+=size) out.push(arr.slice(i,i+size));
+  return out;
+}
+
+async function loadPhotos(){
+  try{
+    const res = await fetch(`${RAW}/photos.json?t=${Date.now()}`, {cache:"no-store"});
+    if(res.ok){
+      const data = await res.json();
+      photos = data.photos || [];
+    } else {
+      photos = [];
+    }
+  }catch(e){
+    photos = [];
+  }
+  buildPages();
+  render();
+}
+
+function buildPages(){
+  pages = [{type:'cover'}, ...chunk(photos.slice().reverse(), 2).map(p=>({type:'photos', items:p}))];
+  if(currentIndex > pages.length-1) currentIndex = pages.length-1;
+}
+
+function pageInnerHTML(page, pageNum){
+  if(page.type==='cover'){
+    const photoSrc = CONFIG.coverPhoto ? `${RAW}/${CONFIG.coverPhoto}` : '';
+    return `
+      <div class="cover-photo"><img src="${photoSrc}" onerror="this.parentElement.style.display='none'"></div>
+      <h2>Livro d${CONFIG.childArticle} ${CONFIG.childName}</h2>
+      <span>toque e arraste para folhear &#8594;</span>
+    `;
+  }
+  if(page.items.length===0){
+    return `<div class="empty-page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      <p>Nenhuma foto ainda</p>
+    </div>`;
+  }
+  const imgs = page.items.map(f=>`<div class="photo-wrap"><img src="${RAW}/${f}" loading="lazy"></div>`).join('');
+  return imgs + `<span class="pagenum">${pageNum}</span>`;
+}
+
+function render(){
+  bookEl.innerHTML = '';
+  // render de tras pra frente: paginas seguintes ficam por baixo (z-index menor)
+  for(let i = pages.length-1; i>=0; i--){
+    const div = document.createElement('div');
+    div.className = 'page' + (pages[i].type==='cover' ? ' cover' : '');
+    div.dataset.index = i;
+    div.style.zIndex = pages.length - i;
+    div.innerHTML = pageInnerHTML(pages[i], i);
+    let rot = 0;
+    if(i < currentIndex) rot = -180;
+    div.style.transform = `rotateY(${rot}deg)`;
+    div.style.transition = 'none';
+    bookEl.appendChild(div);
+  }
+  indicatorEl.textContent = `${currentIndex+1} / ${pages.length}`;
+  prevBtn.disabled = currentIndex<=0;
+  nextBtn.disabled = currentIndex>=pages.length-1;
+  attachDrag();
+}
+
+function goNext(){
+  if(animating || currentIndex>=pages.length-1) return;
+  animating = true;
+  const el = bookEl.querySelector(`.page[data-index="${currentIndex}"]`);
+  el.style.transition = 'transform .5s cubic-bezier(.4,.1,.2,1)';
+  el.style.transform = 'rotateY(-180deg)';
+  setTimeout(()=>{ currentIndex++; animating=false; render(); }, 480);
+}
+function goPrev(){
+  if(animating || currentIndex<=0) return;
+  animating = true;
+  const idx = currentIndex-1;
+  const el = bookEl.querySelector(`.page[data-index="${idx}"]`);
+  el.style.transition = 'transform .5s cubic-bezier(.4,.1,.2,1)';
+  el.style.transform = 'rotateY(0deg)';
+  setTimeout(()=>{ currentIndex--; animating=false; render(); }, 480);
+}
+
+prevBtn.addEventListener('click', goPrev);
+nextBtn.addEventListener('click', goNext);
+
+// ---- Drag para virar pagina (com efeito 3D) ----
+let dragging=false, startX=0, dragEl=null, dragDir=null;
+
+function attachDrag(){
+  const topEl = bookEl.querySelector(`.page[data-index="${currentIndex}"]`);
+  const underEl = currentIndex>0 ? bookEl.querySelector(`.page[data-index="${currentIndex-1}"]`) : null;
+  if(topEl){
+    topEl.onpointerdown = (e)=> startDrag(e, topEl, 'next');
+  }
+  if(underEl){
+    underEl.onpointerdown = null; // under page nao recebe (fica embaixo), previous se faz arrastando a topo pra direita
+  }
+}
+
+function startDrag(e, el, dir){
+  if(animating) return;
+  dragging = true; dragEl = el; dragDir = dir; startX = e.clientX;
+  el.setPointerCapture(e.pointerId);
+  el.style.transition='none';
+  el.addEventListener('pointermove', onDragMove);
+  el.addEventListener('pointerup', onDragEnd);
+  el.addEventListener('pointercancel', onDragEnd);
+}
+function onDragMove(e){
+  if(!dragging) return;
+  const dx = e.clientX - startX;
+  const width = dragEl.offsetWidth;
+  if(dx < 0){
+    // arrastando pra esquerda -> vira pra proxima
+    let deg = Math.max(-180, (dx/width)*220);
+    dragEl.style.transform = `rotateY(${deg}deg)`;
+  } else if(dx > 0 && currentIndex>0){
+    // arrastando pra direita -> volta pagina anterior (mexe na pagina de baixo)
+    const underEl = bookEl.querySelector(`.page[data-index="${currentIndex-1}"]`);
+    if(underEl){
+      underEl.style.transition='none';
+      let deg = Math.min(0, -180 + (dx/width)*220);
+      underEl.style.transform = `rotateY(${deg}deg)`;
+    }
+  }
+}
+function onDragEnd(e){
+  if(!dragging) return;
+  dragging=false;
+  dragEl.removeEventListener('pointermove', onDragMove);
+  dragEl.removeEventListener('pointerup', onDragEnd);
+  dragEl.removeEventListener('pointercancel', onDragEnd);
+  const dx = e.clientX - startX;
+  const width = dragEl.offsetWidth;
+  const threshold = width*0.28;
+  if(dx < -threshold){
+    goNext();
+  } else if(dx > threshold && currentIndex>0){
+    goPrev();
+  } else {
+    // volta pro lugar
+    dragEl.style.transition='transform .35s ease';
+    dragEl.style.transform = `rotateY(0deg)`;
+    if(currentIndex>0){
+      const underEl = bookEl.querySelector(`.page[data-index="${currentIndex-1}"]`);
+      if(underEl){ underEl.style.transition='transform .35s ease'; underEl.style.transform='rotateY(-180deg)'; }
+    }
+  }
+}
+
+// ---- Adicionar foto ----
+addBtn.addEventListener('click', ()=> fileInput.click());
+
+fileInput.addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  fileInput.value='';
+  try{
+    toast('Preparando foto...', true);
+    const base64 = await resizeAndEncode(file, 1400, 0.82);
+    toast('Enviando foto...', true);
+    const filename = `fotos/${Date.now()}.jpg`;
+    await githubPut(filename, base64, `Adiciona foto de ${CONFIG.childName}`);
+
+    toast('Atualizando o livro...', true);
+    await updatePhotosJson(filename);
+
+    toast('Foto adicionada! 🎉');
+    setTimeout(hideToast, 2200);
+    await loadPhotos();
+    currentIndex = pages.length-1;
+    render();
+  }catch(err){
+    console.error(err);
+    toast('Erro ao enviar a foto. Tenta de novo.');
+    setTimeout(hideToast, 3000);
+  }
+});
+
+function resizeAndEncode(file, maxW, quality){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = ()=>{ img.src = reader.result; };
+    reader.onerror = reject;
+    img.onload = ()=>{
+      let {width, height} = img;
+      if(width > maxW){ height = height*(maxW/width); width = maxW; }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL('image/jpeg', quality);
+      resolve(dataUrl.split(',')[1]);
+    };
+    img.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function githubPut(path, base64Content, message, sha=null){
+  const body = { message, content: base64Content, branch: CONFIG.branch };
+  if(sha) body.sha = sha;
+  const res = await fetch(`${API}/${path}`, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `token ${CONFIG.token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  if(!res.ok){
+    const txt = await res.text();
+    throw new Error('GitHub PUT falhou: '+txt);
+  }
+  return res.json();
+}
+
+async function githubGet(path){
+  const res = await fetch(`${API}/${path}?ref=${CONFIG.branch}`, {
+    headers: { 'Authorization': `token ${CONFIG.token}` }
+  });
+  if(!res.ok) throw new Error('GitHub GET falhou');
+  return res.json();
+}
+
+async function updatePhotosJson(newFilename){
+  let sha=null, list=[];
+  try{
+    const current = await githubGet('photos.json');
+    sha = current.sha;
+    const decoded = decodeURIComponent(escape(atob(current.content.replace(/\n/g,''))));
+    list = JSON.parse(decoded).photos || [];
+  }catch(e){
+    list = [];
+  }
+  list.push(newFilename);
+  const newContent = btoa(unescape(encodeURIComponent(JSON.stringify({photos:list}, null, 2))));
+  await githubPut('photos.json', newContent, 'Atualiza lista de fotos', sha);
+}
+
+// registra service worker (funciona offline pra abrir o app, fotos precisam de internet)
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+
+loadPhotos();
+</script>
+</body>
+</html>
