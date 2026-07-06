@@ -107,14 +107,14 @@
     width:58px; height:58px; border-radius:50%; border:none;
     background:#fff; color:var(--c1); font-size:28px; font-weight:800;
     box-shadow:0 8px 24px rgba(0,0,0,.35);
-    display:none; align-items:center; justify-content:center;
+    display:flex; align-items:center; justify-content:center;
     position:fixed; right:20px; bottom: calc(env(safe-area-inset-bottom,0px) + 90px);
   }
   #adminScreen{
     position:fixed; inset:0; z-index:110;
     background: rgba(0,0,0,.75);
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    padding:24px; color:#fff; text-align:center; gap:18px;
+    padding:24px; color:#fff; text-align:center; gap:14px;
   }
   #adminScreen.hidden{display:none;}
   #adminScreen .lock-icon{
@@ -130,7 +130,10 @@
     width:100%; max-width:260px; padding:14px; border-radius:14px; border:none;
     background:#fff; color:var(--c1); font-size:16px; font-weight:800;
   }
-  #adminError{ color:#fff; font-size:13px; font-weight:700; min-height:16px;}
+  #adminError, #adminMsg{ font-size:13px; font-weight:700; min-height:16px;}
+  #adminError{ color:#fff; }
+  #adminMsg{ color:#c8ffc8; }
+  #adminScreen .divider{ width:100%; max-width:260px; height:1px; background:rgba(255,255,255,.25); margin:6px 0;}
   #toast{
     position:fixed; left:50%; top:20px; transform:translateX(-50%) translateY(-60px);
     background:rgba(20,20,20,.92); color:#fff; padding:10px 18px; border-radius:30px;
@@ -195,6 +198,13 @@
   <input type="password" id="adminInput" placeholder="Senha de admin" autocomplete="off" inputmode="text">
   <button id="adminBtn">Entrar</button>
   <div id="adminError"></div>
+  <div id="adminPanel" style="display:none; width:100%; display:flex; flex-direction:column; align-items:center; gap:14px;">
+    <div class="divider"></div>
+    <h2>Trocar senha do livro</h2>
+    <input type="text" id="newPassInput" placeholder="Nova senha">
+    <button id="savePassBtn">Salvar nova senha</button>
+    <div id="adminMsg"></div>
+  </div>
 </div>
 
 <div id="lockScreen">
@@ -215,8 +225,8 @@ const CONFIG = {
   seedPhotoUrl: "https://raw.githubusercontent.com/claudio-solda/livro-miguel/main/fotos/miguel-001.jpg",
   password: "Messi",
   lockKey: "livro-miguel_unlocked",
+  customPasswordKey: "livro-miguel_custom_password",
   adminPassword: "0198",
-  adminSessionKey: "livro-miguel_admin",
   firebaseApiKey: "AIzaSyC58yXOGfhBhVRhWWHd-Cd5zwPFRutVdoA",
   firebaseProjectId: "livros-fotos"
 };
@@ -232,7 +242,8 @@ const CONFIG = {
     return;
   }
   function tryUnlock(){
-    if(lockInput.value === CONFIG.password){
+    const senhaAtual = localStorage.getItem(CONFIG.customPasswordKey) || CONFIG.password;
+    if(lockInput.value === senhaAtual){
       localStorage.setItem(CONFIG.lockKey, 'yes');
       lockScreen.classList.add('hidden');
     } else {
@@ -246,23 +257,23 @@ const CONFIG = {
   setTimeout(()=> lockInput.focus(), 300);
 })();
 
-// ---- Área admin escondida (toque 5x no título) ----
+// ---- Área admin escondida (toque 5x no título) — trocar senha do livro ----
 (function initAdmin(){
-  const addBtn = document.getElementById('addBtn');
   const adminScreen = document.getElementById('adminScreen');
   const adminInput = document.getElementById('adminInput');
   const adminBtn = document.getElementById('adminBtn');
   const adminError = document.getElementById('adminError');
+  const adminPanel = document.getElementById('adminPanel');
+  const newPassInput = document.getElementById('newPassInput');
+  const savePassBtn = document.getElementById('savePassBtn');
+  const adminMsg = document.getElementById('adminMsg');
   const titulo = document.querySelector('header h1');
 
-  function unlockAdmin(){
-    addBtn.style.display = 'flex';
-    sessionStorage.setItem(CONFIG.adminSessionKey, 'yes');
-  }
-
-  // Se já desbloqueou nessa sessão (app ainda aberto), mantém visível
-  if(sessionStorage.getItem(CONFIG.adminSessionKey) === 'yes'){
-    unlockAdmin();
+  function fecharAdmin(){
+    adminScreen.classList.add('hidden');
+    adminPanel.style.display = 'none';
+    adminInput.style.display = '';
+    adminBtn.style.display = '';
   }
 
   let taps = 0, tapTimer = null;
@@ -275,14 +286,22 @@ const CONFIG = {
       adminScreen.classList.remove('hidden');
       adminInput.value = '';
       adminError.textContent = '';
+      adminMsg.textContent = '';
+      newPassInput.value = '';
+      adminPanel.style.display = 'none';
+      adminInput.style.display = '';
+      adminBtn.style.display = '';
       setTimeout(()=> adminInput.focus(), 200);
     }
   });
 
   function tryAdmin(){
     if(adminInput.value === CONFIG.adminPassword){
-      unlockAdmin();
-      adminScreen.classList.add('hidden');
+      adminError.textContent = '';
+      adminInput.style.display = 'none';
+      adminBtn.style.display = 'none';
+      adminPanel.style.display = 'flex';
+      setTimeout(()=> newPassInput.focus(), 200);
     } else {
       adminError.textContent = 'Senha incorreta';
       adminInput.value = '';
@@ -291,7 +310,21 @@ const CONFIG = {
   }
   adminBtn.addEventListener('click', tryAdmin);
   adminInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') tryAdmin(); });
-  adminScreen.addEventListener('click', (e)=>{ if(e.target===adminScreen) adminScreen.classList.add('hidden'); });
+
+  function salvarNovaSenha(){
+    const nova = newPassInput.value.trim();
+    if(nova.length < 3){
+      adminMsg.textContent = 'Digite pelo menos 3 caracteres';
+      return;
+    }
+    localStorage.setItem(CONFIG.customPasswordKey, nova);
+    adminMsg.textContent = 'Senha atualizada! ✅';
+    setTimeout(fecharAdmin, 1200);
+  }
+  savePassBtn.addEventListener('click', salvarNovaSenha);
+  newPassInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') salvarNovaSenha(); });
+
+  adminScreen.addEventListener('click', (e)=>{ if(e.target===adminScreen) fecharAdmin(); });
 })();
 
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${CONFIG.firebaseProjectId}/databases/(default)/documents`;
